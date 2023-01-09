@@ -1,0 +1,12 @@
+#cloud-config
+growpart:
+  mode: auto
+  devices: ["/"]
+  ignore_growroot_disabled: false
+ssh_pwauth: yes
+users:
+  - name: root
+    lock_passwd: false
+    plain_text_passwd: changeme
+    ssh_authorized_keys: [] # Add your keys here
+

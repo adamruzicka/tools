@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+
+PROGNAME="$0"
+
+DEFAULT_DOMAIN=example.com
+DEFAULT_MEMORY=1024
+DEFAULT_VCPU=2
+DEFAULT_SIZE=40G
+DEFAULT_OSVARIANT=centos7.0
+DEFAULT_VMCLONE_BASE_DIR=/var/lib/libvirt/images/base
+DEFAULT_VMCLONE_LIBVIRT_STORAGE_DIR=/var/lib/libvirt/images
+DEFAULT_VMCLONE_NAME_PROVIDER="petname -a"
+
+function usage() {
+        cat << EOF
+Usage: $PROGNAME [options...]
+
+Creates virtual machines from cloud images
+
+Options:
+EOF
+        cat <<EOF | column -s\& -t
+-n|--name NAME & use NAME as the name of the newly created VM, random by default
+-m|--memory MEMORY & let the VM use MEMORY megabytes of memory, default $DEFAULT_MEMORY
+-c|--cpu CPU & let the VM use CPU cpus, default $DEFAULT_VCPU
+-d|--description DESCRIPTION & set VM description to DESCRIPTION
+-D|--domain DOMAIN & use DOMAIN as VM's domain, default $DEFAULT_DOMAIN
+-s|--size SIZE & use a disk of SIZE gigabytes, default $DEFAULT_SIZE
+-o|--osvariant OSVARIANT & set the OS variant to OSVARIANT, default $DEFAULT_OSVARIANT
+-C|--cloud-init CLOUD_INIT & use cloud init template located at CLOUD_INIT
+-h|--help & show this output
+EOF
+echo
+cat <<EOF | column -s\& -t
+Environment variables:
+VMCLONE_BASE_DIR & set the directory where base images are located, default $DEFAULT_VMCLONE_BASE_DIR
+VMCLONE_LIBVIRT_STORAGE_DIR & set the directory where the images are located, default $DEFAULT_VMCLONE_LIBVIRT_STORAGE_DIR
+VMCLONE_NAME_PROVIDER & execute VMCLONE_NAME_PROVIDER to autogenerate host names, default $DEFAULT_VMCLONE_NAME_PROVIDER
+EOF
+}
+
+function die() {
+	echo "$2" >&2
+	exit $1
+}
+
+SHORTOPTS="n:m:c:d:D:s:o:h"
+LONGOPTS="name:,memory:,cpu:,description:,domain:,size:,osvariant:,help"
+
+ARGS=$(getopt -s bash \
+              --options $SHORTOPTS \
+              --longoptions $LONGOPTS \
+              --name "$PROGNAME" \
+              -- "$@" )
+
+if [ $? -gt 0 ]; then
+    die 1 "getopt failed"
+fi
+
+eval set -- "$ARGS"
+
+while true; do
+    case $1 in
+        -n|--name)
+            shift
+            NAME="$1"
+            ;;
+		-m|--memory)
+			shift
+			MEMORY="$1"
+			;;
+		-c|--cpu)
+			shift
+			VCPU="$1"
+			;;
+		-d|--description)
+			shift
+			DESCRIPTION="$1"
+			;;
+		-D|--domain)
+			shift
+			DOMAIN="$1"
+			;;
+		-s|--size)
+			shift
+			SIZE="$1"
+			;;
+		-o|--osvariant)
+			shift
+			OSVARIANT="$1"
+			;;
+		-h|--help)
+			usage
+			exit 0
+			;;
+        \?)
+            die 1 "Invalid option: -$OPTARG"
+            ;;
+        --)
+            ;;
+        *)
+		echo "$1"
+            [ -n "$1" ] || break
+            die 1 "Unaccepted parameter: $1"
+            shift
+            ;;
+    esac
+    shift
+done
+
+: ${DOMAIN:=$DEFAULT_DOMAIN}
+: ${VMCLONE_NAME_PROVIDER:=$DEFAULT_VMCLONE_NAME_PROVIDER}
+: ${NAME:=$($VMCLONE_NAME_PROVIDER)}
+: ${MEMORY:=$DEFAULT_MEMORY}
+: ${VCPU:=$DEFAULT_VCPU}
+: ${SIZE:=$DEFAULT_SIZE}
+: ${OSVARIANT:=$DEFAULT_OSVARIANT}
+: ${VMCLONE_BASE_DIR:=$DEFAULT_VMCLONE_BASE_DIR}
+: ${VMCLONE_LIBVIRT_STORAGE_DIR:=$DEFAULT_VMCLONE_LIBVIRT_STORAGE_DIR}
+
+cd "$VMCLONE_BASE_DIR"
+BASE="$(readlink -f "$(fzf)")"
+: ${DESCRIPTION:=$BASE}
+cd "$VMCLONE_LIBVIRT_STORAGE_DIR"
+sudo qemu-img create -f qcow2 -F qcow2 -b "$BASE" "${NAME}.${DOMAIN}.qcow2" ${SIZE}
+
+CLOUDINIT="$(mktemp --suffix -vmclone-cloudinit)"
+cat "$VMCLONE_BASE_DIR/cloud-init" >> "$CLOUDINIT"
+cat <<EOF >>"$CLOUDINIT"
+fqdn: ${NAME}.${DOMAIN}
+hostname: ${NAME}
+EOF
+
+virt-install --import \
+	--name "${NAME}.${DOMAIN}" \
+	--memory $MEMORY \
+	--disk "${NAME}.${DOMAIN}.qcow2" \
+	--vcpus $VCPU \
+	--os-variant $OSVARIANT \
+	--noautoconsole \
+	--cloud-init user-data="$CLOUDINIT" \
+	--metadata description="$DESCRIPTION"
+rm "$CLOUDINIT"
+
