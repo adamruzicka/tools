@@ -9,7 +9,7 @@ DEFAULT_SIZE=40G
 DEFAULT_OSVARIANT=centos7.0
 DEFAULT_VMCLONE_BASE_DIR=/var/lib/libvirt/images/base
 DEFAULT_VMCLONE_LIBVIRT_STORAGE_DIR=/var/lib/libvirt/images
-DEFAULT_VMCLONE_NAME_PROVIDER="petname -a"
+DEFAULT_VMCLONE_NAME_PROVIDER="petname"
 
 function usage() {
         cat << EOF
@@ -122,7 +122,7 @@ cd "$VMCLONE_BASE_DIR"
 BASE="$(readlink -f "$(fzf)")"
 : ${DESCRIPTION:=$BASE}
 cd "$VMCLONE_LIBVIRT_STORAGE_DIR"
-sudo qemu-img create -f qcow2 -F qcow2 -b "$BASE" "${NAME}.${DOMAIN}.qcow2" ${SIZE}
+sudo qemu-img create -q -f qcow2 -F qcow2 -b "$BASE" "${NAME}.${DOMAIN}.qcow2" ${SIZE}
 
 CLOUDINIT="$(mktemp --suffix -vmclone-cloudinit)"
 cat "$VMCLONE_BASE_DIR/cloud-init" >> "$CLOUDINIT"
@@ -141,4 +141,4 @@ virt-install --import \
 	--cloud-init user-data="$CLOUDINIT" \
 	--metadata description="$DESCRIPTION"
 rm "$CLOUDINIT"
-
+echo "${NAME}.${DOMAIN}"
