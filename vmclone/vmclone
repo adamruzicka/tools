@@ -43,7 +43,7 @@ EOF
 
 function die() {
 	echo "$2" >&2
-	exit $1
+	exit "$1"
 }
 
 function select_base_image() {
@@ -68,10 +68,6 @@ ARGS=$(getopt -s bash \
               --longoptions $LONGOPTS \
               --name "$PROGNAME" \
               -- "$@" )
-
-if [ $? -gt 0 ]; then
-    die 1 "getopt failed"
-fi
 
 eval set -- "$ARGS"
 
@@ -118,49 +114,49 @@ while true; do
 		echo "$1"
             [ -n "$1" ] || break
             die 1 "Unaccepted parameter: $1"
-            shift
             ;;
     esac
     shift
 done
 
-: ${VMCLONE_NAME_PROVIDER:=$DEFAULT_VMCLONE_NAME_PROVIDER}
-: ${NAME:=$($VMCLONE_NAME_PROVIDER 2>/dev/null)}
+: "${VMCLONE_NAME_PROVIDER:=$DEFAULT_VMCLONE_NAME_PROVIDER}"
+: "${NAME:=$($VMCLONE_NAME_PROVIDER 2>/dev/null)}"
 if [ -z "$NAME" ]; then
 	echo "'$VMCLONE_NAME_PROVIDER' failed to produce a name" >&2
 	read -r -p "Name: " NAME
 fi
 [ -n "$NAME" ] || die 1 "No name provided"
 
-: ${DOMAIN:=$DEFAULT_DOMAIN}
-: ${MEMORY:=$DEFAULT_MEMORY}
-: ${VCPU:=$DEFAULT_VCPU}
-: ${SIZE:=$DEFAULT_SIZE}
-: ${OSVARIANT:=$DEFAULT_OSVARIANT}
-: ${VMCLONE_BASE_DIR:=$DEFAULT_VMCLONE_BASE_DIR}
-: ${VMCLONE_LIBVIRT_STORAGE_DIR:=$DEFAULT_VMCLONE_LIBVIRT_STORAGE_DIR}
+: "${DOMAIN:=$DEFAULT_DOMAIN}"
+: "${MEMORY:=$DEFAULT_MEMORY}"
+: "${VCPU:=$DEFAULT_VCPU}"
+: "${SIZE:=$DEFAULT_SIZE}"
+: "${OSVARIANT:=$DEFAULT_OSVARIANT}"
+: "${VMCLONE_BASE_DIR:=$DEFAULT_VMCLONE_BASE_DIR}"
+: "${VMCLONE_LIBVIRT_STORAGE_DIR:=$DEFAULT_VMCLONE_LIBVIRT_STORAGE_DIR}"
 
+FQDN="${NAME}.${DOMAIN}"
 
 select_base_image "$VMCLONE_BASE_DIR" || die 1 "No base image selected"
-: ${DESCRIPTION:=$BASE}
+: "${DESCRIPTION:=$BASE}"
 cd "$VMCLONE_LIBVIRT_STORAGE_DIR"
-sudo qemu-img create -q -f qcow2 -F qcow2 -b "$BASE" "${NAME}.${DOMAIN}.qcow2" ${SIZE}
+sudo qemu-img create -q -f qcow2 -F qcow2 -b "$BASE" "${FQDN}.qcow2" "${SIZE}"
 
 CLOUDINIT="$(mktemp --suffix -vmclone-cloudinit)"
 cat "$VMCLONE_BASE_DIR/cloud-init" >> "$CLOUDINIT"
 cat <<EOF >>"$CLOUDINIT"
-fqdn: ${NAME}.${DOMAIN}
+fqdn: ${FQDN}
 hostname: ${NAME}
 EOF
 
 virt-install --import \
-	--name "${NAME}.${DOMAIN}" \
-	--memory $MEMORY \
-	--disk "${NAME}.${DOMAIN}.qcow2" \
-	--vcpus $VCPU \
-	--os-variant $OSVARIANT \
+	--name "${FQDN}" \
+	--memory "$MEMORY" \
+	--disk "${FQDN}.qcow2" \
+	--vcpus "$VCPU" \
+	--os-variant "$OSVARIANT" \
 	--noautoconsole \
 	--cloud-init user-data="$CLOUDINIT" \
 	--metadata description="$DESCRIPTION"
 rm "$CLOUDINIT"
-echo "${NAME}.${DOMAIN}"
+echo "${FQDN}"
