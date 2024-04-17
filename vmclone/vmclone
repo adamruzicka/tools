@@ -44,6 +44,20 @@ function die() {
 	exit $1
 }
 
+function select_base_image() {
+	cd "$1"
+	if command -v fzf >/dev/null; then
+		IMG="$(fzf)"
+	else
+		ls -1
+		read -r -p "Base image: " IMG
+	fi
+	if [ -z "$IMG" ]; then
+		return 1
+	fi
+	BASE="$(readlink -f "$IMG")"
+}
+
 SHORTOPTS="n:m:c:d:D:s:o:h"
 LONGOPTS="name:,memory:,cpu:,description:,domain:,size:,osvariant:,help"
 
@@ -108,9 +122,15 @@ while true; do
     shift
 done
 
-: ${DOMAIN:=$DEFAULT_DOMAIN}
 : ${VMCLONE_NAME_PROVIDER:=$DEFAULT_VMCLONE_NAME_PROVIDER}
-: ${NAME:=$($VMCLONE_NAME_PROVIDER)}
+: ${NAME:=$($VMCLONE_NAME_PROVIDER 2>/dev/null)}
+if [ -z "$NAME" ]; then
+	echo "'$VMCLONE_NAME_PROVIDER' failed to produce a name" >&2
+	read -r -p "Name: " NAME
+fi
+[ -n "$NAME" ] || die 1 "No name provided"
+
+: ${DOMAIN:=$DEFAULT_DOMAIN}
 : ${MEMORY:=$DEFAULT_MEMORY}
 : ${VCPU:=$DEFAULT_VCPU}
 : ${SIZE:=$DEFAULT_SIZE}
@@ -118,8 +138,8 @@ done
 : ${VMCLONE_BASE_DIR:=$DEFAULT_VMCLONE_BASE_DIR}
 : ${VMCLONE_LIBVIRT_STORAGE_DIR:=$DEFAULT_VMCLONE_LIBVIRT_STORAGE_DIR}
 
-cd "$VMCLONE_BASE_DIR"
-BASE="$(readlink -f "$(fzf)")"
+
+select_base_image "$VMCLONE_BASE_DIR" || die 1 "No base image selected"
 : ${DESCRIPTION:=$BASE}
 cd "$VMCLONE_LIBVIRT_STORAGE_DIR"
 sudo qemu-img create -q -f qcow2 -F qcow2 -b "$BASE" "${NAME}.${DOMAIN}.qcow2" ${SIZE}

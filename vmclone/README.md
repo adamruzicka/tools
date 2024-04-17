@@ -24,7 +24,7 @@ A utility to quickly spin up virtual machines from cloud images.
 - bash
 - virt-install
 - qemu-img
-- fzf
 - sudo
+- fzf (optional)
 - petname (optional) - https://github.com/allenap/rust-petname
 
