@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -e
+
 PROGNAME="$0"
 
 DEFAULT_DOMAIN=example.com
